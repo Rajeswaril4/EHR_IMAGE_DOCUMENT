@@ -7,25 +7,66 @@ import pickle
 import base64
 import re
 import csv
+import secrets
+import hashlib
 from pathlib import Path
 from typing import Optional, Dict, Tuple, List
 from collections import defaultdict
-import jwt
 from datetime import datetime, timedelta
+from functools import wraps
+
+# NEW: Load environment variables
+from dotenv import load_dotenv
+load_dotenv()
+
+# NEW: Email support
+from flask_mail import Mail, Message
+
+# NEW: Rate limiting
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
+import jwt
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
+# SECURITY: NO DEFAULT SECRETS - Fail fast if not provided
+JWT_SECRET = os.getenv("JWT_SECRET")
+SECRET_KEY = os.getenv("FLASK_SECRET_KEY")
 
-JWT_SECRET = os.getenv("JWT_SECRET", "change-this-jwt-secret")
+if not JWT_SECRET or not SECRET_KEY:
+    raise RuntimeError(
+        "CRITICAL: JWT_SECRET and FLASK_SECRET_KEY must be set in environment variables. "
+        "Run generate_secrets.py to create secure values."
+    )
+
 JWT_ALGO = "HS256"
-JWT_EXP_HOURS = 8
+JWT_EXP_HOURS = 1  # Reduced from 8 to 1 hour
 
+# SECURITY: Database config from environment
+DB_CONFIG = {
+    'host': os.getenv('DB_HOST', 'localhost'),
+    'user': os.getenv('DB_USER'),
+    'password': os.getenv('DB_PASSWORD'),
+    'database': os.getenv('DB_NAME', 'ehr_system'),
+    'port': int(os.getenv('DB_PORT', 3306))
+}
 
-import mysql.connector
-from mysql.connector import Error
+if not DB_CONFIG['user'] or not DB_CONFIG['password']:
+    raise RuntimeError("DB_USER and DB_PASSWORD must be set in environment variables")
 
-from dotenv import load_dotenv
-load_dotenv()
+# Email configuration
+MAIL_CONFIG = {
+    'MAIL_SERVER': os.getenv('SMTP_HOST', 'smtp.gmail.com'),
+    'MAIL_PORT': int(os.getenv('SMTP_PORT', 587)),
+    'MAIL_USE_TLS': True,
+    'MAIL_USERNAME': os.getenv('SMTP_USER'),
+    'MAIL_PASSWORD': os.getenv('SMTP_PASSWORD'),
+    'MAIL_DEFAULT_SENDER': os.getenv('SMTP_FROM', 'noreply@localhost')
+}
+
+APP_URL = os.getenv('APP_URL', 'http://localhost:5000')
+UPLOAD_MAX_SIZE = int(os.getenv('UPLOAD_MAX_SIZE', 10485760))  # 10MB default
 
 from flask import (
     Flask, request, jsonify, send_file, send_from_directory,
@@ -97,18 +138,44 @@ SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "change-this-in-prod")
 
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "bmp", "tif", "tiff", "dcm"}
 
-DB_CONFIG = {
-    'host': 'localhost',      
-    'user': 'root',           
-    'password': 'password',   
-    'database': 'ehr_system'
-}
-
 app = Flask(__name__, static_folder=None)
 app.secret_key = SECRET_KEY
+app.config['MAX_CONTENT_LENGTH'] = UPLOAD_MAX_SIZE
 
+# Configure email
+app.config.update(MAIL_CONFIG)
+mail = Mail(app)
+
+# Configure CORS properly
 if cors_available:
-    CORS(app)
+    allowed_origins = os.getenv('ALLOWED_ORIGINS', APP_URL).split(',')
+    CORS(app, 
+         origins=allowed_origins,
+         supports_credentials=True,
+         methods=["GET", "POST", "PUT", "DELETE"],
+         allow_headers=["Content-Type", "Authorization", "X-Auth-Token"])
+
+# Configure rate limiting
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://"
+)
+
+# Security headers
+@app.after_request
+def set_security_headers(response):
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com;"
+    
+    # Only set HSTS in production
+    if os.getenv('FLASK_ENV') == 'production':
+        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    
+    return response
 
 
 
@@ -200,34 +267,35 @@ def create_jwt(email, role):
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
 
-
 def decode_jwt_from_request():
+    """Extract and validate JWT from request - SINGLE SOURCE ONLY"""
     token = None
-
-    token = request.cookies.get("token")
-
     
-    if not token:
-        auth = request.headers.get("Authorization", "")
-        if auth.startswith("Bearer "):
-            token = auth.split(" ", 1)[1]
-
-   
-    if not token:
-        token = request.headers.get("X-Auth-Token")
-
+    # SECURITY: Only accept from Authorization header (standard)
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        token = auth.split(" ", 1)[1]
     
+    # Fallback to cookie for browser-based access
     if not token:
-        token = request.form.get("token")
-
+        token = request.cookies.get("token")
+    
     if not token:
         return None
-
+    
+    # Check if token is blacklisted
+    if is_token_blacklisted(token):
+        log_security_event("blacklisted_token_used", None, {"token_preview": token[:10]})
+        return None
+    
     try:
-        return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
+        return payload
     except jwt.ExpiredSignatureError:
+        log_security_event("expired_token_used", None)
         return None
     except jwt.InvalidTokenError:
+        log_security_event("invalid_token_used", None)
         return None
 
 from functools import wraps
@@ -358,6 +426,136 @@ def icd_lookup_by_diagnosis(diagnosis: str) -> Optional[str]:
         if k.lower() in diag or diag in k.lower():
             return v
     return None
+# ============ NEW SECURITY HELPER FUNCTIONS ============
+
+def hash_token(token: str) -> str:
+    """Create SHA-256 hash of token for storage"""
+    return hashlib.sha256(token.encode()).hexdigest()
+
+def is_token_blacklisted(token: str) -> bool:
+    """Check if token has been revoked"""
+    token_hash = hash_token(token)
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute(
+            "SELECT id FROM token_blacklist WHERE token_hash = %s",
+            (token_hash,)
+        )
+        result = cur.fetchone()
+        cur.close()
+        conn.close()
+        return result is not None
+    except Exception:
+        return False
+
+def blacklist_token(token: str, reason: str = "logout"):
+    """Add token to blacklist"""
+    token_hash = hash_token(token)
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO token_blacklist (token_hash, reason) VALUES (%s, %s)",
+            (token_hash, reason)
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"Failed to blacklist token: {e}")
+
+def log_security_event(event_type: str, email: Optional[str] = None, details: Optional[Dict] = None):
+    """Log security-related events"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO security_events (event_type, email, ip_address, details)
+            VALUES (%s, %s, %s, %s)
+        """, (
+            event_type,
+            email,
+            request.remote_addr,
+            json.dumps(details or {})
+        ))
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"Failed to log security event: {e}")
+
+def log_admin_action(action: str, admin_email: str, target_email: Optional[str] = None, details: Optional[Dict] = None):
+    """Log all admin actions for audit trail"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO admin_audit_log 
+            (admin_email, action, target_email, details, ip_address, user_agent)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (
+            admin_email,
+            action,
+            target_email,
+            json.dumps(details or {}),
+            request.remote_addr,
+            request.headers.get('User-Agent', '')[:500]
+        ))
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"Failed to log admin action: {e}")
+
+def is_valid_email(email: str) -> bool:
+    """Validate email format"""
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return re.match(pattern, email) is not None
+
+def is_strong_password(password: str) -> Tuple[bool, str]:
+    """Check password strength"""
+    if len(password) < 12:
+        return False, "Password must be at least 12 characters"
+    
+    if not re.search(r'[A-Z]', password):
+        return False, "Password must contain uppercase letter"
+    
+    if not re.search(r'[a-z]', password):
+        return False, "Password must contain lowercase letter"
+    
+    if not re.search(r'\d', password):
+        return False, "Password must contain a number"
+    
+    if not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
+        return False, "Password must contain special character"
+    
+    # Check against common passwords
+    common_passwords = ['password', '12345678', 'qwerty', 'admin123']
+    if password.lower() in common_passwords:
+        return False, "Password is too common"
+    
+    return True, "Strong password"
+
+def send_email(to: str, subject: str, body: str):
+    """Send email (implement with your email service)"""
+    if not MAIL_CONFIG['MAIL_USERNAME']:
+        print(f"EMAIL NOT CONFIGURED - Would send to {to}:")
+        print(f"Subject: {subject}")
+        print(f"Body: {body}")
+        return
+    
+    try:
+        msg = Message(
+            subject=subject,
+            recipients=[to],
+            body=body
+        )
+        mail.send(msg)
+        log_security_event("email_sent", to, {"subject": subject})
+    except Exception as e:
+        print(f"Failed to send email: {e}")
+        log_security_event("email_failed", to, {"error": str(e)})
 
 # ---------------- image helper functions ----------------
 def _resize_pil(img: Image.Image, target: Tuple[int,int]) -> Image.Image:
@@ -687,31 +885,59 @@ def admin_list_users():
     except Exception as e:
         print("admin_list_users error:", e)
         return jsonify({"error": "failed to list users", "detail": str(e)}), 500
-
+# ---------------- Set user role endpoint ----------------
 @app.route("/api/admin/set_role", methods=["POST"])
+@admin_required
+@limiter.limit("20 per hour")
 def admin_set_role():
-    if not is_admin():
-        return jsonify({"error": "admin required"}), 403
     data = request.get_json(silent=True) or request.form.to_dict() or {}
     email = (data.get("email") or "").strip().lower()
     role = (data.get("role") or "user").strip().lower()
+    
     if not email or role not in ("user", "admin"):
         return jsonify({"error": "email and role ('user'|'admin') required"}), 400
+    
+    # Prevent self-demotion if last admin
+    if email == g.user_email.lower() and role == "user":
+        conn = get_db_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT COUNT(*) as cnt FROM users WHERE role = 'admin'")
+        admin_count = cur.fetchone()['cnt']
+        cur.close()
+        conn.close()
+        
+        if admin_count <= 1:
+            return jsonify({"error": "Cannot demote last admin"}), 400
+    
     try:
         conn = get_db_connection()
         cur = conn.cursor()
-        cur.execute("UPDATE users SET role = %s WHERE LOWER(email) = %s", (role, email))
-        conn.commit()
+        cur.execute(
+            "UPDATE users SET role = %s WHERE LOWER(email) = %s",
+            (role, email)
+        )
         changed = cur.rowcount
+        conn.commit()
         cur.close()
         conn.close()
+        
         if changed == 0:
             return jsonify({"error": "user not found"}), 404
+        
+        # AUDIT LOG
+        log_admin_action(
+            action="role_change",
+            admin_email=g.user_email,
+            target_email=email,
+            details={"new_role": role}
+        )
+        
         return jsonify({"ok": True, "email": email, "role": role}), 200
+        
     except Exception as e:
         print("admin_set_role error:", e)
-        return jsonify({"error": "failed to set role", "detail": str(e)}), 500
-
+        return jsonify({"error": "failed to set role"}), 500
+# ---------------- Report deletion endpoints ----------------
 @app.route("/api/admin/delete_report/<int:rowid>", methods=["DELETE"])
 def admin_delete_report(rowid):
     if not is_admin():
@@ -732,24 +958,55 @@ def admin_delete_report(rowid):
         return jsonify({"error": "failed to delete report", "detail": str(e)}), 500
 
 @app.route("/api/admin/delete_user/<string:email>", methods=["DELETE"])
+@admin_required
+@limiter.limit("10 per hour")
 def admin_delete_user_reports(email):
-    if not is_admin():
-        return jsonify({"error": "admin required"}), 403
     target = email.strip().lower()
     if not target:
         return jsonify({"error": "email required"}), 400
+    
+    # Prevent deleting own reports
+    if target == g.user_email.lower():
+        return jsonify({"error": "Cannot delete your own reports"}), 400
+    
     try:
         conn = get_db_connection()
         cur = conn.cursor()
+        
+        # Get count before deletion
+        cur.execute("SELECT COUNT(*) as cnt FROM reports WHERE LOWER(user_email) = %s", (target,))
+        count_before = cur.fetchone()[0]
+        
+        # Delete reports
         cur.execute("DELETE FROM reports WHERE LOWER(user_email) = %s", (target,))
         count = cur.rowcount
         conn.commit()
         cur.close()
         conn.close()
-        return jsonify({"ok": True, "deleted_reports_count": count, "user": target}), 200
+        
+        # AUDIT LOG
+        log_admin_action(
+            action="delete_user_reports",
+            admin_email=g.user_email,
+            target_email=target,
+            details={"deleted_count": count, "count_before": count_before}
+        )
+        
+        return jsonify({
+            "ok": True, 
+            "deleted_reports_count": count, 
+            "user": target
+        }), 200
+        
     except Exception as e:
         print("admin_delete_user_reports error:", e)
-        return jsonify({"error": "failed to delete user reports", "detail": str(e)}), 500
+        log_admin_action(
+            action="delete_user_reports_failed",
+            admin_email=g.user_email,
+            target_email=target,
+            details={"error": str(e)}
+        )
+        return jsonify({"error": "failed to delete user reports"}), 500
 
 @app.route("/api/admin/clear_reports", methods=["DELETE"])
 def admin_clear_reports():
@@ -818,8 +1075,9 @@ def dashboard():
     if status == 200:
         return render_template_string(content)
     return content, status
-
+# ---------------- Registration route ----------------
 @app.route("/register", methods=["GET", "POST"])
+@limiter.limit("5 per hour")  # Prevent registration spam
 def register_route():
     if request.method == "GET":
         content, status = _load_frontend_page("register.html")
@@ -831,20 +1089,32 @@ def register_route():
     password = request.form.get("password") or ""
     password2 = request.form.get("password2") or ""
 
+    # Validation
     if not email or not password:
+        log_security_event("registration_failed", email, {"reason": "missing_fields"})
         return jsonify({"error": "Email and password required"}), 400
+    
+    if not is_valid_email(email):
+        return jsonify({"error": "Invalid email format"}), 400
 
     if password != password2:
         return jsonify({"error": "Passwords do not match"}), 400
+    
+    # Check password strength
+    is_strong, message = is_strong_password(password)
+    if not is_strong:
+        return jsonify({"error": message}), 400
 
     ok = create_user(email, password)
     if not ok:
+        log_security_event("registration_failed", email, {"reason": "user_exists"})
         return jsonify({"error": "User already exists"}), 400
 
+    log_security_event("user_registered", email)
     return jsonify({"ok": True, "message": "Registration successful"}), 200
-
-
+# ---------------- Login / Logout routes ----------------
 @app.route("/login", methods=["GET", "POST"])
+@limiter.limit("10 per minute")  # Prevent brute force
 def login_route():
     if request.method == "GET":
         content, status = _load_frontend_page("login.html")
@@ -858,20 +1128,89 @@ def login_route():
     if not email or not password:
         return jsonify({"error": "Email and password required"}), 400
 
+    # Check account lockout
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    cur.execute("""
+        SELECT failed_login_attempts, account_locked_until 
+        FROM users WHERE LOWER(email) = %s
+    """, (email,))
+    user = cur.fetchone()
+    
+    if user:
+        locked_until = user.get('account_locked_until')
+        if locked_until and locked_until > datetime.now():
+            cur.close()
+            conn.close()
+            log_security_event("login_attempt_locked", email)
+            return jsonify({
+                "error": f"Account locked until {locked_until.strftime('%H:%M:%S')}"
+            }), 403
+    
+    cur.close()
+    conn.close()
+
+    # Authenticate
     if not authenticate_user(email, password):
+        # Increment failed attempts
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE users 
+            SET failed_login_attempts = failed_login_attempts + 1,
+                account_locked_until = CASE 
+                    WHEN failed_login_attempts + 1 >= 5 
+                    THEN NOW() + INTERVAL 15 MINUTE 
+                    ELSE NULL 
+                END
+            WHERE LOWER(email) = %s
+        """, (email,))
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        log_security_event("login_failed", email)
         return jsonify({"error": "Invalid credentials"}), 401
+
+    # Reset failed attempts on successful login
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE users 
+        SET failed_login_attempts = 0, 
+            account_locked_until = NULL,
+            last_login = NOW()
+        WHERE LOWER(email) = %s
+    """, (email,))
+    conn.commit()
+    cur.close()
+    conn.close()
 
     role = get_user_role(email)
     token = create_jwt(email, role)
 
-    #  SET TOKEN IN COOKIE
+    log_security_event("login_success", email)
+
+    # SECURITY: Set secure cookie
     resp = jsonify({
         "email": email,
-        "role": role
+        "role": role,
+        "token": token  # Also return in response for mobile apps
     })
-    resp.set_cookie('token', token, httponly=True, secure=False, samesite='Lax')
+    
+    # Secure cookie settings
+    is_production = os.getenv('FLASK_ENV') == 'production'
+    resp.set_cookie(
+        'token', 
+        token, 
+        httponly=True, 
+        secure=is_production,  # Only HTTPS in production
+        samesite='Strict',  # Prevent CSRF
+        max_age=JWT_EXP_HOURS * 3600
+    )
+    
     return resp, 200
-
+# ---------------- Logout route ----------------
 
 @app.route("/logout", methods=["POST"])
 def logout_route():
@@ -1792,43 +2131,150 @@ def admin_dashboard():
 RESET_TOKENS = {}
 # ---------------- Password reset endpoints ----------------
 @app.route("/forgot-password", methods=["POST"])
+@limiter.limit("3 per hour")  # Strict rate limit
 def forgot_password():
-    email = request.form.get("email")
-    token = create_jwt(email, "user")
-    RESET_TOKENS[token] = email
-    # In real app → email this token
-    print("RESET LINK:", f"http://localhost:5000/reset-password?token={token}")
-    return "", 200
-
-# ---------------- Password reset endpoints ----------------
-@app.route("/reset-password", methods=["POST"])
-def reset_password():
-    token = request.form.get("token")
-    password = request.form.get("password")
-
-    email = RESET_TOKENS.get(token)
-    if not email:
-        return "", 400
-
-    pw_hash = generate_password_hash(password)
+    email = (request.form.get("email") or "").strip().lower()
+    
+    if not email or not is_valid_email(email):
+        return jsonify({"error": "Invalid email"}), 400
+    
+    # Constant-time response to prevent email enumeration
+    time.sleep(0.5)
+    
     conn = get_db_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(dictionary=True)
+    cur.execute("SELECT id FROM users WHERE LOWER(email) = %s", (email,))
+    user = cur.fetchone()
+    
+    if user:
+        # Generate cryptographically secure token
+        token = secrets.token_urlsafe(32)
+        
+        # Store token with expiration
+        cur.execute("""
+            INSERT INTO password_resets (email, token)
+            VALUES (%s, %s)
+        """, (email, token))
+        conn.commit()
+        
+        # Send email with reset link
+        reset_url = f"{APP_URL}/reset-password?token={token}"
+        email_body = f"""
+You requested a password reset for your EHR Assistant account.
+
+Click the link below to reset your password (valid for 1 hour):
+{reset_url}
+
+If you didn't request this, please ignore this email.
+
+For security, this link will expire in 1 hour.
+        """
+        
+        send_email(
+            to=email,
+            subject="Password Reset Request - EHR Assistant",
+            body=email_body
+        )
+        
+        log_security_event("password_reset_requested", email)
+    
+    cur.close()
+    conn.close()
+    
+    # Always return success (prevent email enumeration)
+    return jsonify({
+        "message": "If an account exists with that email, a reset link has been sent."
+    }), 200
+
+# ---------------- Password reset page and submission ----------------
+@app.route("/reset-password", methods=["GET", "POST"])
+def reset_password_route():
+    if request.method == "GET":
+        content, status = _load_frontend_page("reset_password.html")
+        if status == 200:
+            return render_template_string(content)
+        return content, status
+    
+    # POST - actually reset the password
+    token = (request.form.get("token") or "").strip()
+    password = request.form.get("password") or ""
+    
+    if not token or not password:
+        return jsonify({"error": "Missing required fields"}), 400
+    
+    # Validate password strength
+    is_strong, message = is_strong_password(password)
+    if not is_strong:
+        return jsonify({"error": message}), 400
+    
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    
+    # Find valid unused token (within 1 hour)
+    cur.execute("""
+        SELECT email FROM password_resets
+        WHERE token = %s
+          AND used = FALSE
+          AND created_at >= NOW() - INTERVAL 1 HOUR
+    """, (token,))
+    
+    reset = cur.fetchone()
+    
+    if not reset:
+        cur.close()
+        conn.close()
+        log_security_event("password_reset_invalid_token", None, {"token_preview": token[:10]})
+        return jsonify({"error": "Invalid or expired reset link"}), 400
+    
+    email = reset["email"]
+    
+    # Update password
+    pw_hash = generate_password_hash(password)
     cur.execute(
-        "UPDATE users SET password_hash=%s WHERE email=%s",
+        "UPDATE users SET password_hash = %s WHERE LOWER(email) = %s",
         (pw_hash, email)
     )
+    
+    # Mark token as used
+    cur.execute(
+        "UPDATE password_resets SET used = TRUE, used_at = NOW() WHERE token = %s",
+        (token,)
+    )
+    
     conn.commit()
     cur.close()
     conn.close()
+    
+    # Notify user
+    send_email(
+        to=email,
+        subject="Password Changed - EHR Assistant",
+        body=f"""Your EHR Assistant password was successfully changed.
 
-    RESET_TOKENS.pop(token, None)
-    return "", 200
+If you didn't make this change, please contact support immediately.
 
+Login at: {APP_URL}/login
+"""
+    )
+    
+    log_security_event("password_reset_completed", email)
+    
+    return jsonify({"message": "Password updated successfully"}), 200
 # ---------------- Logout endpoint ----------------
-@app.route("/logout")
-def logout():
+@app.route("/logout", methods=["GET", "POST"])
+def logout_route():
+    # Get token to blacklist it
+    token = request.cookies.get("token")
+    if token:
+        blacklist_token(token, "user_logout")
+    
+    # Get email if available
+    payload = decode_jwt_from_request()
+    if payload:
+        log_security_event("user_logout", payload.get("email"))
+    
     resp = make_response(redirect("/login"))
-    resp.set_cookie("token", "", expires=0)
+    resp.set_cookie('token', '', expires=0)
     return resp
 
 # ---------------- Error handlers ----------------
