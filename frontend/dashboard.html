@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>EHR Assistant - Dashboard</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <style>
+    body {
+      font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      background: radial-gradient(circle at top, #e0f2ff 0, #f5f7fb 45%, #f3f4f6 100%);
+    }
+
+    .card {
+      box-shadow:
+        0 10px 15px -3px rgba(15, 23, 42, 0.08),
+        0 4px 6px -4px rgba(15, 23, 42, 0.06);
+    }
+
+    .user-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 12px;
+      border-radius: 9999px;
+      background: linear-gradient(90deg, #ffffff, #f3f4f6);
+      border: 1px solid rgba(148, 163, 184, 0.4);
+    }
+
+    .user-avatar {
+      width: 30px;
+      height: 30px;
+      border-radius: 9999px;
+      display: inline-grid;
+      place-items: center;
+      color: #f9fafb;
+      background: linear-gradient(135deg, #4f46e5, #6366f1);
+      font-weight: 600;
+      font-size: 0.8rem;
+    }
+
+    .nav-hidden {
+      display: none !important;
+    }
+
+    canvas {
+      width: 100% !important;
+      height: 180px !important;
+    }
+  </style>
+</head>
+
+<body class="min-h-screen">
+
+  <nav class="bg-white/90 backdrop-blur border-b border-slate-200">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex h-16 items-center justify-between">
+        <a href="/frontend/index.html" class="flex items-center gap-2 group">
+          <span
+            class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-sky-100 text-sky-600 group-hover:bg-sky-600 group-hover:text-white transition">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4" />
+            </svg>
+          </span>
+          <div>
+            <p class="text-sm font-semibold tracking-tight text-slate-800">EHR Assistant</p>
+            <p class="text-xs text-slate-500 -mt-0.5">Clinical Imaging Workspace</p>
+          </div>
+        </a>
+
+        <div class="hidden sm:flex items-center gap-8 text-sm font-medium">
+          <a href="/frontend/index.html"
+            class="text-slate-600 hover:text-slate-900 border-b-2 border-transparent hover:border-sky-500 pb-1">
+            Home
+          </a>
+          <a href="/frontend/index.html"
+            class="text-slate-500 hover:text-slate-900 border-b-2 border-transparent hover:border-sky-500 pb-1">
+            Single Processor
+          </a>
+          <a href="/frontend/bulk.html"
+            class="text-slate-500 hover:text-slate-900 border-b-2 border-transparent hover:border-sky-500 pb-1">
+            Bulk Processor
+          </a>
+          <a href="/dashboard" class="text-sky-600 border-b-2 border-sky-500 pb-1">
+            Dashboard
+          </a>
+          <a id="admin-link" href="/admin" class="hidden text-slate-600 hover:text-sky-600 font-medium">
+            Admin Dashboard
+          </a>
+        </div>
+        <div class="hidden sm:flex items-center gap-4" id="auth-area" aria-live="polite">
+          <a id="signin-link" href="/login" class="text-sm font-medium text-slate-500 hover:text-slate-900">
+            Sign in
+          </a>
+          <a id="signup-link" href="/register"
+            class="inline-flex items-center px-4 py-2 text-sm font-semibold rounded-full bg-sky-600 text-white shadow-sm hover:bg-sky-700">
+            Sign up
+          </a>
+
+          <div id="user-area" class="nav-hidden">
+            <span class="user-badge">
+              <span id="user-avatar" class="user-avatar">U</span>
+              <span id="user-email" class="text-xs sm:text-sm text-slate-800 max-w-[160px] truncate"></span>
+              <button id="logout-btn"
+                class="text-xs sm:text-sm px-3 py-1 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-700">
+                Logout
+              </button>
+            </span>
+          </div>
+        </div>
+
+        <div class="sm:hidden flex items-center gap-3">
+          <button id="mobile-signin" class="text-xs font-medium text-slate-600">Sign in</button>
+          <button id="mobile-signup" class="px-3 py-1.5 text-xs font-semibold text-white bg-sky-600 rounded-full">
+            Sign up
+          </button>
+
+          <div id="mobile-user-area" class="nav-hidden inline-flex items-center gap-2 ml-2">
+            <span id="mobile-user-avatar" class="inline-grid place-items-center rounded-full text-sm font-semibold"
+              style="width:28px;height:28px;background:linear-gradient(135deg,#4f46e5,#6366f1);color:white;">U</span>
+            <button id="mobile-logout-btn" class="text-xs px-2 py-1 rounded border bg-white">Logout</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
+    <header class="mb-8 sm:mb-10 flex flex-wrap items-center justify-between gap-4">
+      <div>
+        <h1 class="text-2xl sm:text-3xl font-semibold tracking-tight text-slate-900">
+          Analytics Dashboard
+        </h1>
+        <p class="mt-2 text-sm sm:text-base text-slate-500 max-w-2xl">
+          High-level overview of processed patients, bulk pipeline health, and recent AI inferences
+          across your environment.
+        </p>
+      </div>
+      <div class="flex gap-3 text-xs sm:text-sm">
+        <button id="refreshBtn"
+          class="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 font-medium text-slate-600 hover:bg-slate-50">
+          Refresh
+        </button>
+        <a href="/frontend/bulk.html"
+          class="inline-flex items-center rounded-full bg-sky-600 px-3 py-1.5 font-medium text-white shadow-sm hover:bg-sky-700">
+          New Bulk Run
+        </a>
+      </div>
+    </header>
+
+    <main class="space-y-6">
+      <section class="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div class="card bg-white rounded-2xl border border-slate-200 px-5 py-4 flex flex-col justify-between">
+          <div class="flex items-center justify-between">
+            <p class="text-xs font-semibold text-slate-500 tracking-wide">
+              Total Patients Processed
+            </p>
+            <span class="inline-flex items-center rounded-full bg-sky-50 px-2 py-0.5 text-[11px] text-sky-700">
+              Lifetime
+            </span>
+          </div>
+          <p id="totalPatients" class="mt-2 text-3xl sm:text-4xl font-extrabold text-sky-700">
+            --
+          </p>
+          <p id="totalDelta" class="mt-1 text-xs text-emerald-600 font-medium"></p>
+        </div>
+
+        <div class="card bg-white rounded-2xl border border-slate-200 px-5 py-4 flex flex-col justify-between">
+          <div class="flex items-center justify-between">
+            <p class="text-xs font-semibold text-slate-500 tracking-wide">
+              Pending Bulk Jobs
+            </p>
+            <span class="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700">
+              Queue
+            </span>
+          </div>
+          <p id="pendingJobs" class="mt-2 text-3xl sm:text-4xl font-extrabold text-amber-500">
+            --
+          </p>
+          <p class="mt-1 text-xs text-slate-500">
+            Longest wait: <span id="longestWait" class="font-medium text-slate-700">—</span>
+          </p>
+        </div>
+
+        <div class="card bg-white rounded-2xl border border-slate-200 px-5 py-4 flex flex-col justify-between">
+          <div class="flex items-center justify-between">
+            <p class="text-xs font-semibold text-slate-500 tracking-wide">
+              Successful Notes Generated
+            </p>
+            <span class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700">
+              Last 24 hours
+            </span>
+          </div>
+          <p id="successRate" class="mt-2 text-3xl sm:text-4xl font-extrabold text-emerald-600">
+            --
+          </p>
+          <p class="mt-1 text-xs text-slate-500">
+            Failed runs are automatically flagged for review.
+          </p>
+        </div>
+      </section>
+
+      <section class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div class="card bg-white rounded-2xl border border-slate-200 px-5 py-4">
+          <h3 class="text-sm font-semibold text-slate-800 mb-2">Patients / day (last 30 days)</h3>
+          <canvas id="tsChart"></canvas>
+        </div>
+
+        <div class="card bg-white rounded-2xl border border-slate-200 px-5 py-4">
+          <h3 class="text-sm font-semibold text-slate-800 mb-2">Top ICD-10 codes</h3>
+          <canvas id="icdChart"></canvas>
+        </div>
+
+        <div class="card bg-white rounded-2xl border border-slate-200 px-5 py-4">
+          <h3 class="text-sm font-semibold text-slate-800 mb-2">Disease categories</h3>
+          <canvas id="catChart"></canvas>
+        </div>
+      </section>
+
+      <section class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div class="lg:col-span-2 card bg-white rounded-2xl border border-slate-200 px-5 py-4">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-sm sm:text-base font-semibold text-slate-900">
+              Recent Activity
+            </h2>
+            <span class="text-[11px] text-slate-500">
+              Most recent 10 runs
+            </span>
+          </div>
+
+          <ul id="recentActivityList" class="divide-y divide-slate-100 text-sm">
+            <li class="py-3 text-xs text-slate-500">Loading recent runs…</li>
+          </ul>
+        </div>
+
+        <div class="card bg-white rounded-2xl border border-slate-200 px-5 py-4">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-sm sm:text-base font-semibold text-slate-900">
+              System Health
+            </h2>
+            <span
+              class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+              Operational
+            </span>
+          </div>
+
+          <dl class="space-y-3 text-xs sm:text-sm text-slate-700">
+            <div class="flex items-center justify-between">
+              <dt>Inference latency (p95)</dt>
+              <dd class="font-semibold">1.8 s</dd>
+            </div>
+            <div class="flex items-center justify-between">
+              <dt>GPU utilization</dt>
+              <dd class="font-semibold">72%</dd>
+            </div>
+            <div class="flex items-center justify-between">
+              <dt>Queue depth</dt>
+              <dd class="font-semibold">3 jobs</dd>
+            </div>
+            <div class="flex items-center justify-between">
+              <dt>Error rate (last hour)</dt>
+              <dd class="font-semibold text-emerald-600">0.4%</dd>
+            </div>
+          </dl>
+
+          <div class="mt-4 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 text-[11px] text-slate-500">
+            <p class="font-semibold text-slate-700 mb-1">Status notes</p>
+            <p>All services are healthy. Monitoring is active for abnormal spike in failed note generations or long
+              queues.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ✅ AUTHENTICATED FETCH HELPER -->
+  <script>
+    async function authenticatedFetch(url, options = {}) {
+      const token = localStorage.getItem('token');
+
+      if (!token) {
+        console.warn('No token found, redirecting to login');
+        window.location.href = '/login';
+        return;
+      }
+
+      options.headers = {
+        ...options.headers,
+        'X-Auth-Token': token
+      };
+
+      options.credentials = 'same-origin';
+
+      const response = await fetch(url, options);
+
+      if (response.status === 401) {
+        console.warn('Unauthorized (401), redirecting to login');
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+        return;
+      }
+
+      return response;
+    }
+  </script>
+
+  <!-- AUTH & STATS SCRIPT -->
+  <script>
+    (async function () {
+      const STAT_URL = "/api/dashboard_stats";
+      const totalEl = document.getElementById("totalPatients");
+      const pendingEl = document.getElementById("pendingJobs");
+      const successEl = document.getElementById("successRate");
+      const recentList = document.getElementById("recentActivityList");
+      const refreshBtn = document.getElementById("refreshBtn");
+
+      function fmtNumber(n) {
+        return (n === null || n === undefined) ? "—" : Number(n).toLocaleString();
+      }
+
+      function renderRecent(recent) {
+        if (!recent || !recent.length) {
+          recentList.innerHTML = `<li class="py-3 text-xs text-slate-500">No recent runs.</li>`;
+          return;
+        }
+        recentList.innerHTML = "";
+        recent.forEach(r => {
+          const li = document.createElement("li");
+          li.className = "py-3 flex items-center justify-between";
+          const left = document.createElement("div");
+          left.innerHTML = `<p class="font-medium text-slate-800">
+                          ${r.patient_id || ("ID " + (r.id || ""))}
+                        </p>
+                        <p class="text-xs text-slate-500">
+                          ${r.icd10 || "ICD: UNK"} · ${r.created_at || ""}
+                          ${r.disease_name ? '· ' + r.disease_name : ''}
+                        </p>`;
+          const badge = document.createElement("span");
+          const state = (r.disease_name && r.disease_name !== "None (No acute abnormality detected)") ? "Flagged" : "Completed";
+          badge.className = state === "Flagged"
+            ? "inline-flex items-center rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700"
+            : "inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700";
+          badge.textContent = state;
+          li.appendChild(left);
+          li.appendChild(badge);
+          recentList.appendChild(li);
+        });
+      }
+
+      async function refreshStats() {
+        try {
+          // ✅ USE authenticatedFetch
+          const resp = await authenticatedFetch(STAT_URL);
+          if (!resp || !resp.ok) throw new Error("Status " + (resp ? resp.status : 'unknown'));
+          const j = await resp.json();
+          totalEl.textContent = fmtNumber(j.total);
+          pendingEl.textContent = fmtNumber(j.failed_total || 0);
+          successEl.textContent = (j.success_rate !== undefined && j.success_rate !== null) ? `${j.success_rate}%` : "—";
+          renderRecent(j.recent || []);
+        } catch (err) {
+          console.error("Failed to fetch dashboard stats:", err);
+          recentList.innerHTML = `<li class="py-3 text-xs text-red-600">Failed to load stats.</li>`;
+        }
+      }
+
+      refreshStats();
+
+      const intervalId = setInterval(refreshStats, 30_000);
+
+      if (refreshBtn) {
+        refreshBtn.addEventListener("click", refreshStats);
+      }
+
+      window.addEventListener("beforeunload", () => clearInterval(intervalId));
+
+      // AUTH (whoami) LOGIC
+      async function loadAuthState() {
+        function el(id) { return document.getElementById(id); }
+        const signin = el('signin-link');
+        const signup = el('signup-link');
+        const userArea = el('user-area');
+        const userEmailEl = el('user-email');
+        const userAvatar = el('user-avatar');
+        const logoutBtn = el('logout-btn');
+
+        const mobileSignIn = el('mobile-signin');
+        const mobileSignUp = el('mobile-signup');
+        const mobileUserArea = el('mobile-user-area');
+        const mobileUserAvatar = el('mobile-user-avatar');
+        const mobileLogoutBtn = el('mobile-logout-btn');
+
+        try {
+          // ✅ USE authenticatedFetch
+          const resp = await authenticatedFetch('/api/whoami', { method: 'GET' });
+          if (!resp || !resp.ok) {
+            return;
+          }
+          const data = await resp.json();
+          const email = data.email || '';
+
+          if (signin) signin.classList.add('nav-hidden');
+          if (signup) signup.classList.add('nav-hidden');
+          if (mobileSignIn) mobileSignIn.style.display = 'none';
+          if (mobileSignUp) mobileSignUp.style.display = 'none';
+
+          if (userArea && userEmailEl && userAvatar) {
+            userEmailEl.textContent = email;
+            userAvatar.textContent = (email && email[0]) ? email[0].toUpperCase() : 'U';
+            userArea.classList.remove('nav-hidden');
+          }
+
+          if (mobileUserArea && mobileUserAvatar) {
+            mobileUserAvatar.textContent = (email && email[0]) ? email[0].toUpperCase() : 'U';
+            mobileUserArea.classList.remove('nav-hidden');
+          }
+
+          const doLogout = () => {
+            localStorage.removeItem('token');
+            window.location.href = '/logout';
+          };
+          if (logoutBtn) logoutBtn.addEventListener('click', doLogout);
+          if (mobileLogoutBtn) mobileLogoutBtn.addEventListener('click', doLogout);
+
+        } catch (err) {
+          console.warn('whoami check failed:', err);
+        }
+      }
+
+      loadAuthState();
+
+    })();
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <script>
+    (function () {
+      const ANALYTICS_URL = "/api/dashboard_analytics";
+
+      let tsChart = null, icdChart = null, catChart = null;
+
+      function buildTimeseriesChart(ctx, labels, data) {
+        if (tsChart) tsChart.destroy();
+        tsChart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'Patients',
+              data: data,
+              fill: true,
+              tension: 0.2,
+              borderWidth: 2,
+              backgroundColor: 'rgba(56,189,248,0.12)',
+              borderColor: 'rgba(56,189,248,0.9)'
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: { x: { ticks: { maxRotation: 45, minRotation: 0 } }, y: { beginAtZero: true } }
+          }
+        });
+      }
+
+      function buildBarChart(ctx, labels, data) {
+        if (icdChart) icdChart.destroy();
+        icdChart = new Chart(ctx, {
+          type: 'bar',
+          data: { labels: labels, datasets: [{ label: 'Count', data: data, borderWidth: 1, backgroundColor: 'rgba(59,130,246,0.45)', borderColor: 'rgba(59,130,246,0.9)' }] },
+          options: { responsive: true, maintainAspectRatio: false }
+        });
+      }
+
+      function buildPieChart(ctx, labels, data) {
+        if (catChart) catChart.destroy();
+        catChart = new Chart(ctx, {
+          type: 'pie',
+          data: {
+            labels: labels,
+            datasets: [{
+              data: data,
+              backgroundColor: ['#ef4444', '#f97316', '#22c55e', '#60a5fa']
+            }]
+          },
+          options: { responsive: true, maintainAspectRatio: false }
+        });
+      }
+
+      async function refreshAnalytics() {
+        try {
+          //  USE authenticatedFetch
+          const resp = await authenticatedFetch(ANALYTICS_URL);
+          if (!resp || !resp.ok) throw new Error("Status " + (resp ? resp.status : 'unknown'));
+          const j = await resp.json();
+
+          const ts = j.timeseries || [];
+          const tsLabels = ts.map(x => x.date);
+          const tsCounts = ts.map(x => x.count);
+
+          const icd = j.icd_top || [];
+          const icdLabels = icd.map(x => x.icd + " (" + x.count + ")");
+          const icdCounts = icd.map(x => x.count);
+
+          const cats = j.disease_categories || {};
+          const catLabels = Object.keys(cats);
+          const catValues = catLabels.map(k => cats[k]);
+
+          const tsCtx = document.getElementById('tsChart').getContext('2d');
+          const icdCtx = document.getElementById('icdChart').getContext('2d');
+          const catCtx = document.getElementById('catChart').getContext('2d');
+
+          buildTimeseriesChart(tsCtx, tsLabels, tsCounts);
+          buildBarChart(icdCtx, icdLabels, icdCounts);
+          buildPieChart(catCtx, catLabels, catValues);
+        } catch (err) {
+          console.error("Failed to load analytics:", err);
+        }
+      }
+      refreshAnalytics();
+      setInterval(refreshAnalytics, 120_000);
+    })();
+  </script>
+
+  <!-- ADMIN LINK CHECK -->
+  <script>
+    (async function () {
+      try {
+        const resp = await authenticatedFetch("/api/whoami");
+        if (!resp || !resp.ok) return;
+
+        const data = await resp.json();
+        if (!data.email) return;
+
+        const r = await authenticatedFetch("/api/admin/list_users");
+        if (!r || !r.ok) return;
+
+        const obj = await r.json();
+        const me = obj.users.find(u => u.email === data.email);
+
+        if (me && me.role === "admin") {
+          document.getElementById("admin-link").classList.remove("hidden");
+        }
+      } catch (err) {
+        console.error('Admin check error:', err);
+      }
+    })();
+    //login fetch
+
+    (async function () {
+      try {
+        const res = await fetch("/api/whoami", { credentials: "same-origin" });
+        if (!res.ok) {
+          window.location.href = "/login";
+          return;
+        }
+
+        const user = await res.json();
+
+        document.getElementById("user-email")?.innerText = user.email;
+        document.getElementById("user-avatar")?.innerText = user.email[0].toUpperCase();
+
+        if (user.role === "admin") {
+          document.getElementById("admin-link")?.classList.remove("hidden");
+        }
+      } catch {
+        window.location.href = "/login";
+      }
+    })();
+    // LOGOUT HANDLER 
+    document.getElementById("logout-btn")?.addEventListener("click", async () => {
+      await fetch("/logout", { credentials: "same-origin" });
+      window.location.href = "/login";
+    });
+  </script>
+
+</body>
+
+</html>

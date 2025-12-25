@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sign in — EHR Assistant</title>
+
+
+  <script src="https://cdn.tailwindcss.com"></script>
+
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
+
+  <style>
+    :root{
+     
+      --bg-1: #f6f7fb;           
+      --glass-top: rgba(19, 24, 32, 0.72);   /* dark glass top-left */
+      --glass-bottom: rgba(29, 37, 52, 0.78);/* dark glass bottom-right */
+      --accent-1: #0ea5a3;        /* teal */
+      --accent-2: #2563eb;        /* indigo */
+      --muted: #94a3b8;
+      --card-border: rgba(255,255,255,0.06);
+      --input-bg: rgba(12,16,23,0.55);
+      --input-border: rgba(255,255,255,0.06);
+      --text-light: #e6eef8;
+      --text-strong: #0b1220;
+      --shadow-strong: 0 18px 40px -18px rgba(2,6,23,0.64);
+    }
+
+    html,body {
+      height: 100%;
+      margin: 0;
+      font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      color: var(--text-strong);
+      background: radial-gradient(circle at 10% 10%, #f9fbfe 0%, #eef3f8 35%, #e6edf6 55%, #f5f7fb 100%);
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+    }
+
+    /* Container */
+    .page-wrap {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2.5rem;
+      gap: 2rem;
+    }
+
+    /* Glass card (right) */
+    .glass-card {
+      width: 100%;
+      max-width: 520px;
+      border-radius: 14px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+      box-shadow:
+        0 20px 50px -20px rgba(20,25,35,0.65),
+        0 6px 18px rgba(3,7,18,0.06),
+        inset 0 1px 0 rgba(255,255,255,0.03);
+      backdrop-filter: blur(12px) saturate(120%);
+      border: 1px solid rgba(255,255,255,0.06);
+      padding: 1.25rem 1.5rem;
+      position: relative;
+      color: var(--text-light);
+      overflow: hidden;
+    }
+
+    /* Soft top-left decorative gloss */
+    .glass-card::before{
+      content: "";
+      position: absolute;
+      top: -24%;
+      left: -20%;
+      width: 220%;
+      height: 120%;
+      background: radial-gradient(closest-side, rgba(255,255,255,0.06), transparent 40%),
+                  linear-gradient(120deg, rgba(14,165,163,0.06), rgba(37,99,235,0.04));
+      transform: rotate(-6deg);
+      pointer-events: none;
+    }
+
+    /* Left marketing panel */
+    .marketing {
+      color: #0b1220;
+      max-width: 640px;
+    }
+    .marketing h1 {
+      font-size: 2.25rem;
+      line-height: 1.05;
+      margin: 0 0 0.5rem 0;
+      color: #081024;
+    }
+    .marketing p {
+      color: #334155;
+      margin: 0 0 1rem 0;
+    }
+
+    /* Form inputs */
+    .field-input {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid var(--input-border);
+      background: linear-gradient(180deg, rgba(6,10,14,0.56), rgba(8,12,18,0.48));
+      color: var(--text-light);
+      font-size: 0.95rem;
+      padding: 0.72rem 0.9rem;
+      box-shadow: inset 0 -1px 0 rgba(255,255,255,0.02);
+      transition: box-shadow .14s ease, border-color .14s ease, transform .06s ease;
+    }
+    .field-input::placeholder { color: rgba(226,234,240,0.45); }
+    .field-input:focus {
+      outline: none;
+      border-color: rgba(37,99,235,0.75);
+      box-shadow: 0 4px 20px rgba(37,99,235,0.08);
+      transform: translateY(-1px);
+    }
+
+    label { color: rgba(9, 9, 9, 0.82); font-size: .79rem; display:block; margin-bottom:.35rem; }
+
+    .muted { color: var(--muted); font-size: .87rem; }
+
+    /* Primary button */
+    .btn-primary {
+      width: 100%;
+      border-radius: 10px;
+      border: none;
+      padding: 0.75rem 1rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      background: linear-gradient(90deg, var(--accent-2), var(--accent-1));
+      color: #f2c6c6;
+      box-shadow: 0 10px 30px rgba(6,8,15,0.28);
+      transition: transform .08s ease, box-shadow .12s ease, opacity .12s ease;
+    }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 18px 38px rgba(6,8,15,0.32); }
+    .btn-primary:disabled { opacity: .6; transform:none; cursor:not-allowed; box-shadow:none; }
+
+    /* Small link & utility classes */
+    .small-link { color: #0a0a0a; text-decoration: none; font-size: .9rem; }
+    .small-link:hover { text-decoration: underline; color: var(--accent-2); }
+
+    /* Card panels in left marketing */
+    .feature-card {
+      border-radius: 10px;
+      padding: 0.8rem;
+      background: linear-gradient(180deg, rgba(15,23,42,0.03), rgba(255,255,255,0.01));
+      border: 1px solid rgba(8,12,20,0.04);
+    }
+
+    /* Error box */
+    .error-box {
+      background: rgba(180,20,40,0.08);
+      border: 1px solid rgba(244,63,94,0.12);
+      padding: 10px 12px;
+      border-radius: 10px;
+      color: #fecdd3;
+      font-size: 13px;
+      display: none;
+    }
+
+    /* Responsive tweaks */
+    @media (max-width: 1024px) {
+      .marketing { display: none; }
+      .glass-card { max-width: 740px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page-wrap">
+    <div class="max-w-6xl w-full grid grid-cols-1 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] gap-8 items-center px-4">
+      <!-- Left: Brand / Marketing panel -->
+      <section class="marketing">
+        <a href="/frontend/index.html" class="inline-flex items-center gap-3 mb-6">
+          <span class="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-sky-50 to-teal-50 border border-slate-100">
+            <svg class="w-6 h-6 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                 xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4" />
+            </svg>
+          </span>
+          <div>
+            <p class="text-sm font-semibold tracking-tight">EHR Assistant</p>
+            <p class="text-xs text-muted -mt-0.5">Clinical Imaging Workspace</p>
+          </div>
+        </a>
+
+        <h1 class="mb-2">Log in to your clinical workspace.</h1>
+        <p class="mb-6">Run single-image analysis, bulk cohorts, and metrics dashboards from a single, secure interface. Authentication is required to access protected study data.</p>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div class="feature-card">
+            <dt class="font-semibold text-sm text-slate-700 uppercase tracking-wide">Single-image pipeline</dt>
+            <dd class="mt-1 text-sm text-slate-600">Upload a DICOM or PNG, get structured notes, image comparison and metrics.</dd>
+          </div>
+          <div class="feature-card">
+            <dt class="font-semibold text-sm text-slate-700 uppercase tracking-wide">Bulk jobs & dashboard</dt>
+            <dd class="mt-1 text-sm text-slate-600">Manage CSV cohorts, track success rates, and review completed jobs.</dd>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right: Sign-in card -->
+      <main class="glass-card" aria-labelledby="signin-heading">
+        <header class="mb-4 flex items-start justify-between">
+          <div>
+            <h2 id="signin-heading" style="font-size:1.125rem; margin:0 0 .25rem 0; color:var(--text-light); font-weight:700;">
+              Sign in
+            </h2>
+            <p class="muted" style="margin:0;">Access your EHR Assistant account.</p>
+          </div>
+          <a href="/frontend/index.html" class="small-link hidden sm:inline-flex items-center">Back to workspace</a>
+        </header>
+
+        <!-- Global error -->
+        <div id="formError" class="error-box" role="alert"></div>
+
+        <form id="loginForm" method="post" action="/login" class="mt-2 space-y-4" novalidate>
+          <!-- Email -->
+          <div>
+            <label for="email">Email</label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              autocomplete="email"
+              required
+              placeholder="you@example.com"
+              class="field-input"
+            />
+            <div id="emailError" class="text-red-300 text-[11px] mt-1" style="display:none;"></div>
+          </div>
+
+          <!-- Password -->
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label for="password">Password</label>
+              <a href="/frontend/forgot.html" class="small-link">Forgot?</a>
+            </div>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              required
+              placeholder="password"
+              class="field-input"
+            />
+            <div id="pwdError" class="text-red-300 text-[11px] mt-1" style="display:none;"></div>
+          </div>
+
+          <!-- Remember / submit -->
+          <div class="flex items-center justify-between mt-2 text-sm">
+            <label class="inline-flex items-center gap-3 cursor-pointer" style="color:var(--text-light);">
+              <input
+                type="checkbox"
+                name="remember"
+                class="h-4 w-4 rounded border-gray-300 bg-white"
+                style="accent-color: var(--accent-2);"
+              />
+              <span style="font-size:.92rem; color:rgba(53, 54, 55, 0.86);">Remember me on this device</span>
+            </label>
+            <span class="hidden sm:inline-block muted">Secure · TLS-encrypted</span>
+          </div>
+
+          <div class="mt-4">
+            <button id="submitBtn" class="btn-primary" type="submit">Sign in</button>
+          </div>
+        </form>
+
+        <p class="muted mt-5 text-center" style="color:rgba(230,238,248,0.78);">
+          New here?
+          <a href="/register" class="small-link" style="margin-left:.25rem;">Create an account</a>
+        </p>
+      </main>
+    </div>
+  </div>
+
+<script>
+(function () {
+  const form = document.getElementById("loginForm");
+  const submitBtn = document.getElementById("submitBtn");
+  const formError = document.getElementById("formError");
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    formError.style.display = "none";
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Signing inâ€¦";
+
+    try {
+      const body = new URLSearchParams(new FormData(form));
+
+      const resp = await fetch("/login", {
+        method: "POST",
+        headers: { "Accept": "application/json" },
+        body
+      });
+
+      const data = await resp.json();
+
+      if (!resp.ok) {
+        formError.textContent = data.error || "Login failed";
+        formError.style.display = "block";
+        return;
+      }
+
+      
+      localStorage.setItem("token", data.token);
+
+      
+      window.location.href = "/frontend/home.html";
+
+    } catch (err) {
+      formError.textContent = "Server error. Try again.";
+      formError.style.display = "block";
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Sign in";
+    }
+  });
+})();
+</script>
+
+</body>
+</html>

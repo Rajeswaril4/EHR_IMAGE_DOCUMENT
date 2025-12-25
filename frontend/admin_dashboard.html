@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Admin Dashboard â€“ EHR Assistant</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="min-h-screen bg-slate-50">
+  <nav class="bg-white/90 backdrop-blur border-b border-slate-200">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex h-16 items-center justify-between">
+        <a href="/frontend/index.html" class="flex items-center gap-2 group">
+          <span class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-sky-100 text-sky-600 group-hover:bg-sky-600 group-hover:text-white transition">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4" />
+            </svg>
+          </span>
+          <div>
+            <p class="text-sm font-semibold tracking-tight text-slate-800">EHR Assistant</p>
+            <p class="text-xs text-slate-500 -mt-0.5">Clinical Imaging Workspace</p>
+          </div>
+        </a>
+
+        <div class="hidden sm:flex items-center gap-8 text-sm font-medium">
+          <a href="/frontend/index.html" class="text-slate-600 hover:text-slate-900 border-b-2 border-transparent hover:border-sky-500 pb-1">Home</a>
+          <a href="/frontend/index.html" class="text-slate-500 hover:text-slate-900 border-b-2 border-transparent hover:border-sky-500 pb-1">Single Processor</a>
+          <a href="/frontend/bulk.html" class="text-slate-500 hover:text-slate-900 border-b-2 border-transparent hover:border-sky-500 pb-1">Bulk Processor</a>
+          <a href="/dashboard" class="text-slate-500 hover:text-slate-900 border-b-2 border-transparent hover:border-sky-500 pb-1">Dashboard</a>
+          <a href="/admin" class="text-sky-600 border-b-2 border-sky-500 pb-1">Admin Dashboard</a>
+        </div>
+
+        <div class="hidden sm:flex items-center gap-4" id="auth-area">
+          <a id="signin-link" href="/login" class="text-sm font-medium text-slate-500 hover:text-slate-900">Sign in</a>
+          <a id="signup-link" href="/register" class="inline-flex items-center px-4 py-2 text-sm font-semibold rounded-full bg-sky-600 text-white shadow-sm hover:bg-sky-700">Sign up</a>
+          
+          <div id="user-area" class="hidden">
+            <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-slate-200">
+              <span id="user-avatar" class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-sky-600 text-white text-xs font-semibold">U</span>
+              <span id="user-email" class="text-sm text-slate-800"></span>
+              <button id="logout-btn" class="text-sm px-2 py-1 rounded border hover:bg-slate-50">Logout</button>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="max-w-6xl mx-auto px-4 py-8">
+    <header class="mb-6">
+      <h1 class="text-2xl font-semibold">Admin Control Panel</h1>
+      <p class="text-slate-600">Manage users and global analytics.</p>
+    </header>
+
+    <section class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div class="bg-white rounded-lg border border-slate-200 p-4">
+        <p class="text-xs font-semibold text-slate-500">Total Reports</p>
+        <p id="totalReports" class="text-3xl font-bold text-sky-600">--</p>
+      </div>
+      <div class="bg-white rounded-lg border border-slate-200 p-4">
+        <p class="text-xs font-semibold text-slate-500">Reports (Last 24 Hours)</p>
+        <p id="last24h" class="text-3xl font-bold text-emerald-600">--</p>
+      </div>
+      <div class="bg-white rounded-lg border border-slate-200 p-4">
+        <p class="text-xs font-semibold text-slate-500">Success Rate</p>
+        <p id="successRate" class="text-3xl font-bold text-blue-600">--</p>
+      </div>
+    </section>
+
+    <section class="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-6">
+      <div class="bg-white rounded-lg border border-slate-200 p-4">
+        <h3 class="font-semibold mb-2">Reports per day (30d)</h3>
+        <canvas id="tsChart" style="height:160px"></canvas>
+      </div>
+      <div class="bg-white rounded-lg border border-slate-200 p-4">
+        <h3 class="font-semibold mb-2">Top ICD-10</h3>
+        <canvas id="icdChart" style="height:160px"></canvas>
+      </div>
+      <div class="bg-white rounded-lg border border-slate-200 p-4">
+        <h3 class="font-semibold mb-2">Disease categories</h3>
+        <canvas id="catChart" style="height:160px"></canvas>
+      </div>
+    </section>
+
+    <section class="bg-white rounded-lg border border-slate-200 p-5">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-semibold text-slate-900">Registered Users</h2>
+      </div>
+
+      <table class="w-full text-sm">
+        <thead class="bg-slate-100 text-slate-600">
+          <tr><th class="px-3 py-2 text-left">Email</th><th class="px-3 py-2 text-left">Role</th><th class="px-3 py-2">Actions</th></tr>
+        </thead>
+        <tbody id="userTable"></tbody>
+      </table>
+    </section>
+  </div>
+
+  <!-- USE AUTHENTICATED FETCH HELPER -->
+  <script>
+    async function authenticatedFetch(url, options = {}) {
+      const token = localStorage.getItem('token');
+      
+      if (!token) {
+        console.warn('No token found, redirecting to login');
+        window.location.href = '/login';
+        return;
+      }
+      
+      options.headers = {
+        ...options.headers,
+        'X-Auth-Token': token
+      };
+      
+      options.credentials = 'same-origin';
+      
+      const response = await fetch(url, options);
+      
+      if (response.status === 401) {
+        console.warn('Unauthorized (401), redirecting to login');
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+        return;
+      }
+      
+      return response;
+    }
+    
+  </script>
+
+  <script>
+    async function loadUsers() {
+      // USE authenticatedFetch
+      const resp = await authenticatedFetch("/api/admin/list_users");
+      if (!resp || !resp.ok) { alert('Not authorized or error'); return; }
+      const data = await resp.json();
+      const tbl = document.getElementById("userTable"); 
+      tbl.innerHTML = "";
+      data.users.forEach(u => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td class="px-3 py-2">${u.email}</td>
+                        <td class="px-3 py-2">${u.role}</td>
+                        <td class="px-3 py-2 flex gap-2">
+                          <button class="px-2 py-1 bg-amber-500 text-white rounded" onclick="setRole('${u.email}','admin')">Make Admin</button>
+                          <button class="px-2 py-1 bg-slate-500 text-white rounded" onclick="setRole('${u.email}','user')">Make User</button>
+                          <button class="px-2 py-1 bg-red-600 text-white rounded" onclick="deleteUser('${u.email}')">Delete Reports</button>
+                        </td>`;
+        tbl.appendChild(tr);
+      });
+    }
+
+    async function setRole(email, role) {
+      // USE authenticatedFetch
+      await authenticatedFetch('/api/admin/set_role', { 
+        method:'POST', 
+        headers:{'Content-Type':'application/json'}, 
+        body: JSON.stringify({email, role})
+      });
+      loadUsers();
+    }
+
+    async function deleteUser(email) {
+      if (!confirm('Delete all reports for ' + email + '?')) return;
+      
+      await authenticatedFetch(`/api/admin/delete_user/${email}`, { method:'DELETE' });
+      alert('Deleted reports for ' + email);
+    }
+
+    async function loadStats() {
+      try {
+        // âœ… USE authenticatedFetch
+        const resp = await authenticatedFetch('/api/dashboard_stats?all=true');
+        if (!resp || !resp.ok) throw new Error("Failed to load stats");
+        const j = await resp.json();
+        document.getElementById('totalReports').textContent = j.total;
+        document.getElementById('last24h').textContent = j.last_24h;
+        document.getElementById('successRate').textContent = j.success_rate + '%';
+      } catch (e) {
+        console.error("loadStats error:", e);
+      }
+    }
+
+    async function loadAnalytics() {
+      try {
+        // âœ… USE authenticatedFetch
+        const resp = await authenticatedFetch('/api/dashboard_analytics?all=true');
+        if (!resp || !resp.ok) throw new Error("Failed to load analytics");
+        const j = await resp.json();
+        new Chart(document.getElementById('tsChart'), { 
+          type:'line', 
+          data:{ 
+            labels:j.timeseries.map(x=>x.date), 
+            datasets:[{label:'Reports', data:j.timeseries.map(x=>x.count)}] 
+          }
+        });
+        new Chart(document.getElementById('icdChart'), { 
+          type:'bar', 
+          data:{ 
+            labels:j.icd_top.map(x=>x.icd), 
+            datasets:[{label:'Count', data:j.icd_top.map(x=>x.count)}] 
+          }
+        });
+        new Chart(document.getElementById('catChart'), { 
+          type:'pie', 
+          data:{ 
+            labels:Object.keys(j.disease_categories), 
+            datasets:[{data:Object.values(j.disease_categories)}] 
+          }
+        });
+      } catch(e){
+        console.error("loadAnalytics error:", e);
+      }
+    }
+
+    loadUsers();
+    loadStats();
+    loadAnalytics();
+  </script>
+
+  <!-- AUTH UI UPDATE -->
+  <script>
+    (async function () {
+      const signin = document.getElementById('signin-link');
+      const signup = document.getElementById('signup-link');
+      const userArea = document.getElementById('user-area');
+      const userEmailSpan = document.getElementById('user-email');
+      const userAvatar = document.getElementById('user-avatar');
+      const logoutBtn = document.getElementById('logout-btn');
+
+      async function updateAuthUI() {
+        let who = null;
+        try { 
+          // âœ… USE authenticatedFetch
+          const r = await authenticatedFetch('/api/whoami', { method: 'GET' }); 
+          if (r && r.ok) who = await r.json(); 
+        } catch(e){
+          console.error("whoami error:", e);
+        }
+
+        if (who && who.email) {
+          if (signin) signin.classList.add('hidden'); 
+          if (signup) signup.classList.add('hidden');
+          if (userArea) userArea.classList.remove('hidden'); 
+          if (userEmailSpan) userEmailSpan.textContent = who.email;
+          if (userAvatar) userAvatar.textContent = (who.email[0] || 'U').toUpperCase();
+        } else {
+          if (signin) signin.classList.remove('hidden'); 
+          if (signup) signup.classList.remove('hidden');
+          if (userArea) userArea.classList.add('hidden');
+        }
+        
+        if (logoutBtn) logoutBtn.onclick = async () => { 
+          localStorage.removeItem('token');
+          await fetch('/logout',{method:'GET'}).catch(()=>{}); 
+          window.location.href='/login'; 
+        };
+      }
+      updateAuthUI();
+    })();
+
+  // LOGOUT HANDLER 
+  document.getElementById("logout-btn")?.addEventListener("click", async () => {
+  await fetch("/logout", { credentials: "same-origin" });
+  window.location.href = "/login";
+});
+  </script>
+</body>
+</html>

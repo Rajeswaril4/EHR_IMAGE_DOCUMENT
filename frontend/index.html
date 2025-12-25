@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EHR Assistant - Single Image</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <style>
+    body {
+      font-family: "Inter", sans-serif;
+      background: radial-gradient(circle at top, #e0f2ff 0, #f5f7fb 45%, #f3f4f6 100%);
+    }
+
+    .card {
+      box-shadow: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.06);
+    }
+
+    .report-box {
+      white-space: pre-wrap;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 0.9rem;
+      line-height: 1.5;
+      background: #0f172a;
+      color: #e5e7eb;
+      border-radius: 0.75rem;
+    }
+
+    .tab-active {
+      background: #ecfeff;
+      color: #0891b2 !important;
+      border-color: #06b6d4 !important;
+    }
+
+    .user-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 12px;
+      border-radius: 9999px;
+      background: linear-gradient(90deg, #ffffff, #f3f4f6);
+      border: 1px solid rgba(148, 163, 184, 0.4);
+    }
+
+    .user-avatar {
+      width: 30px;
+      height: 30px;
+      border-radius: 9999px;
+      display: inline-grid;
+      place-items: center;
+      color: #f9fafb;
+      background: linear-gradient(135deg, #4f46e5, #6366f1);
+      font-weight: 600;
+      font-size: 0.8rem;
+    }
+
+    .nav-hidden {
+      display: none !important;
+    }
+
+    .image-container {
+      min-height: 260px;
+    }
+  </style>
+</head>
+
+<body class="min-h-screen">
+
+  <!-- TOP NAVBAR -->
+  <nav class="bg-white/90 backdrop-blur border-b border-slate-200">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex h-16 items-center justify-between">
+        <a href="/frontend/index.html" class="flex items-center gap-2 group">
+          <span
+            class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-sky-100 text-sky-600 group-hover:bg-sky-600 group-hover:text-white transition">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4" />
+            </svg>
+          </span>
+          <div>
+            <p class="text-sm font-semibold tracking-tight text-slate-800">EHR Assistant</p>
+            <p class="text-xs text-slate-500 -mt-0.5">Clinical Imaging Workspace</p>
+          </div>
+        </a>
+
+        <div class="hidden sm:flex items-center gap-8 text-sm font-medium">
+          <a href="/frontend/home.html"
+            class="text-slate-600 hover:text-slate-900 border-b-2 border-transparent hover:border-sky-500 pb-1">Home</a>
+          <a href="/frontend/index.html" class="text-sky-600 border-b-2 border-sky-500 pb-1">Single Processor</a>
+          <a href="/frontend/bulk.html"
+            class="text-slate-500 hover:text-slate-900 border-b-2 border-transparent hover:border-sky-500 pb-1">Bulk
+            Processor</a>
+          <a href="/dashboard"
+            class="text-slate-500 hover:text-slate-900 border-b-2 border-transparent hover:border-sky-500 pb-1">Dashboard</a>
+          <a id="admin-link" href="/admin" class="hidden text-slate-600 hover:text-sky-600 font-medium">Admin
+            Dashboard</a>
+        </div>
+
+        <div class="hidden sm:flex items-center gap-4" id="auth-area" aria-live="polite">
+          <a id="signin-link" href="/login" class="text-sm font-medium text-slate-500 hover:text-slate-900">Sign in</a>
+          <a id="signup-link" href="/register"
+            class="inline-flex items-center px-4 py-2 text-sm font-semibold rounded-full bg-sky-600 text-white shadow-sm hover:bg-sky-700">Sign
+            up</a>
+
+          <div id="user-area" class="nav-hidden">
+            <span class="user-badge">
+              <span id="user-avatar" class="user-avatar">U</span>
+              <span id="user-email" class="text-xs sm:text-sm text-slate-800 max-w-[160px] truncate"></span>
+              <button id="logout-btn"
+                class="text-xs sm:text-sm px-3 py-1 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-700">Logout</button>
+            </span>
+          </div>
+        </div>
+
+        <div class="sm:hidden flex items-center gap-3">
+          <button id="mobile-signin" class="text-xs font-medium text-slate-600">Sign in</button>
+          <button id="mobile-signup" class="px-3 py-1.5 text-xs font-semibold text-white bg-sky-600 rounded-full">Sign
+            up</button>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
+    <header class="mb-6 sm:mb-8">
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-sky-100 text-sky-600">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </span>
+            <h1 class="text-2xl sm:text-3xl font-semibold tracking-tight text-slate-900">EHR Clinical Assistant</h1>
+          </div>
+          <p class="mt-2 text-sm sm:text-base text-slate-500 max-w-2xl">
+            Automated image enhancement, quantitative metrics, and structured clinical note generation for a single
+            imaging study.
+          </p>
+        </div>
+
+        <div class="flex gap-3 text-sm font-medium">
+          <a href="/frontend/index.html"
+            class="px-3 py-1.5 rounded-full bg-sky-50 text-sky-700 border border-sky-100">Single Image Processor</a>
+          <a href="/frontend/bulk.html"
+            class="px-3 py-1.5 rounded-full border border-slate-200 text-slate-500 hover:text-slate-800 hover:border-slate-300">Bulk
+            CSV Processor</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="grid gap-6 lg:gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,2fr)] items-start">
+      <section class="bg-white rounded-2xl card p-5 sm:p-6 lg:sticky lg:top-6">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg sm:text-xl font-semibold text-slate-800">Patient Data & Image</h2>
+          <span
+            class="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700"></span>
+        </div>
+
+        <form id="process-form" class="space-y-4" enctype="multipart/form-data">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label for="age" class="block text-xs font-semibold text-slate-600 tracking-wide">Age (years)</label>
+              <input type="number" id="age" name="age"
+                class="mt-1 block w-full rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-sky-500 focus:ring-sky-500"
+                placeholder="e.g., 67">
+            </div>
+            <div>
+              <label for="sex" class="block text-xs font-semibold text-slate-600 tracking-wide">Gender</label>
+              <select id="sex" name="sex"
+                class="mt-1 block w-full rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-sky-500 focus:ring-sky-500">
+                <option value="">Select...</option>
+                <option value="female">Female</option>
+                <option value="male">Male</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label for="symptoms" class="block text-xs font-semibold text-slate-600 tracking-wide">Symptoms</label>
+            <textarea id="symptoms" name="symptoms" rows="2"
+              class="mt-1 block w-full rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-sky-500 focus:ring-sky-500"
+              placeholder="e.g., Shortness of breath, chest pain"></textarea>
+          </div>
+
+          <div>
+            <label for="diagnosis" class="block text-xs font-semibold text-slate-600 tracking-wide">Initial Diagnosis /
+              Clinical History</label>
+            <textarea id="diagnosis" name="diagnosis" rows="2"
+              class="mt-1 block w-full rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-sky-500 focus:ring-sky-500"
+              placeholder="e.g., Suspected bacterial pneumonia"></textarea>
+          </div>
+
+          <div>
+            <label for="image" class="block text-xs font-semibold text-slate-600 tracking-wide">Medical Image (PNG, JPG,
+              DICOM)</label>
+            <input type="file" id="image" name="image" accept="image/*,.dcm" required
+              class="mt-1 block w-full text-xs text-slate-600 file:mr-4 file:cursor-pointer file:rounded-full file:border-0 file:bg-sky-50 file:px-4 file:py-2 file:text-xs file:font-semibold file:text-sky-700 hover:file:bg-sky-100">
+            <p class="mt-1 text-[11px] text-slate-400">We recommend 512×512 CT or MRI slices for best quantitative
+              metrics.</p>
+          </div>
+
+          <button type="submit" id="submit-btn"
+            class="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 transition">
+            <svg id="spinner" class="hidden h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none"
+              viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+              </path>
+            </svg>
+            <span id="btn-text">Generate Clinical Note</span>
+          </button>
+
+          <p id="error-message" class="mt-2 text-xs text-red-600 hidden"></p>
+        </form>
+      </section>
+
+      <section class="bg-white rounded-2xl card p-5 sm:p-6">
+        <div class="flex items-center justify-between gap-3 mb-4">
+          <div>
+            <h2 class="text-lg sm:text-xl font-semibold text-slate-900">Automated Results</h2>
+            <p class="mt-1 text-[11px] text-slate-500">Download a self-contained report including the clinical note,
+              image comparison and metrics.</p>
+          </div>
+
+          <div class="flex flex-col items-end gap-2">
+            <span
+              class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600">Report
+              Format: HTML</span>
+            <button id="download-report"
+              class="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled>Download Report</button>
+          </div>
+        </div>
+
+        <div id="result-tabs"
+          class="inline-flex rounded-full border border-slate-200 bg-slate-50 p-1 text-xs sm:text-sm font-medium text-slate-500 mb-4">
+          <button data-tab="note" class="px-3 sm:px-4 py-1.5 rounded-full border border-transparent tab-active">Clinical
+            Note</button>
+          <button data-tab="image" class="px-3 sm:px-4 py-1.5 rounded-full border border-transparent">Image
+            Comparison</button>
+          <button data-tab="metrics" class="px-3 sm:px-4 py-1.5 rounded-full border border-transparent">Metrics</button>
+        </div>
+
+        <div id="tab-note" class="tab-content space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-sky-50 px-3 py-2.5">
+            <div>
+              <p class="text-xs font-semibold tracking-wide text-sky-800">Suggested ICD-10 Code</p>
+              <p id="icd10-code" class="text-sm font-semibold text-sky-900">---</p>
+            </div>
+            <p class="text-[11px] text-sky-700 max-w-xs">Use as decision support only. Final coding should follow
+              institutional guidelines.</p>
+          </div>
+
+          <div>
+            <p class="mb-1 text-sm font-medium text-slate-700">Generated Clinical Note</p>
+            <div class="report-box p-4 sm:p-5 border border-slate-800/60">
+              <pre id="note-output"
+                class="overflow-x-auto">Submit patient details and upload an image to generate a structured clinical note, impression, and recommendations here.</pre>
+            </div>
+          </div>
+        </div>
+
+        <div id="tab-image" class="tab-content hidden space-y-3">
+          <div class="flex items-center justify-between text-xs text-slate-500">
+            <span>Original (left) vs enhanced (right)</span>
+            <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px]">Windowing &amp; denoising applied</span>
+          </div>
+          <div id="image-output"
+            class="image-container flex items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50">
+            <span class="text-xs sm:text-sm text-slate-400">Processed image pair will appear here after
+              inference.</span>
+          </div>
+          <p id="image-desc-output" class="text-xs sm:text-sm text-slate-500"></p>
+        </div>
+
+        <div id="tab-metrics" class="tab-content hidden space-y-4">
+          <div>
+            <h3 class="text-sm font-semibold text-slate-800 mb-1.5">Quantitative Analysis</h3>
+            <p class="text-xs text-slate-500">Metrics are computed between the original upload and the internally
+              enhanced image. Higher values generally indicate better preservation of structural information and reduced
+              noise.</p>
+          </div>
+
+          <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <dt class="text-xs font-semibold text-slate-600">PSNR (Peak Signal-to-Noise Ratio)</dt>
+              <dd id="psnr-val" class="mt-1 text-lg font-semibold text-slate-900">---</dd>
+              <p class="mt-1 text-[11px] text-slate-500">Higher PSNR typically reflects improved noise suppression and
+                signal quality.</p>
+            </div>
+            <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <dt class="text-xs font-semibold text-slate-600">SSIM (Structural Similarity Index)</dt>
+              <dd id="ssim-val" class="mt-1 text-lg font-semibold text-slate-900">---</dd>
+              <p class="mt-1 text-[11px] text-slate-500">SSIM captures luminance, contrast, and structural similarity
+                between images.</p>
+            </div>
+          </dl>
+
+          <p class="text-[11px] text-slate-500">These metrics are intended for engineering validation and QA. Clinical
+            decisions should not rely solely on quantitative scores.</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!--  AUTHENTICATED FETCH HELPER - PLACE FIRST -->
+  <script>
+    async function authenticatedFetch(url, options = {}) {
+      const token = localStorage.getItem('token');
+
+      if (!token) {
+        console.warn('No token found, redirecting to login');
+        window.location.href = '/login';
+        return;
+      }
+
+      options.headers = {
+        ...options.headers,
+        'X-Auth-Token': token
+      };
+
+      options.credentials = 'same-origin';
+
+      const response = await fetch(url, options);
+
+      if (response.status === 401) {
+        console.warn('Unauthorized (401), redirecting to login');
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+        return;
+      }
+
+      return response;
+    }
+  </script>
+
+  <!-- AUTH STATE LOADING - UPDATED -->
+  <script>
+    (async function () {
+      try {
+        const resp = await authenticatedFetch("/api/whoami", { method: "GET" });
+        if (!resp || !resp.ok) return;
+
+        const data = await resp.json();
+        const email = data.email || "";
+
+        const signin = document.getElementById("signin-link");
+        const signup = document.getElementById("signup-link");
+        if (signin) signin.classList.add("nav-hidden");
+        if (signup) signup.classList.add("nav-hidden");
+
+        const userArea = document.getElementById("user-area");
+        const userEmailEl = document.getElementById("user-email");
+        const userAvatar = document.getElementById("user-avatar");
+        const logoutBtn = document.getElementById("logout-btn");
+
+        if (userArea && userEmailEl && userAvatar && logoutBtn) {
+          userEmailEl.textContent = email;
+          userAvatar.textContent = (email && email[0]) ? email[0].toUpperCase() : "U";
+          userArea.classList.remove("nav-hidden");
+
+          logoutBtn.addEventListener("click", function () {
+            localStorage.removeItem('token');
+            window.location.href = "/logout";
+          });
+
+          const mSignIn = document.getElementById("mobile-signin");
+          const mSignUp = document.getElementById("mobile-signup");
+          if (mSignIn) mSignIn.style.display = "none";
+          if (mSignUp) mSignUp.style.display = "none";
+        }
+      } catch (err) {
+        console.error('Auth check error:', err);
+      }
+    })();
+  </script>
+
+  <!-- MAIN LOGIC - UPDATED WITH authenticatedFetch -->
+  <script>
+    const API_ENDPOINT = (window.location.origin || "") + "/process_single";
+
+    const form = document.getElementById("process-form");
+    const submitBtn = document.getElementById("submit-btn");
+    const spinner = document.getElementById("spinner");
+    const btnText = document.getElementById("btn-text");
+    const errorMessage = document.getElementById("error-message");
+
+    const noteOutput = document.getElementById("note-output");
+    const icd10Code = document.getElementById("icd10-code");
+    const imageOutput = document.getElementById("image-output");
+    const psnrVal = document.getElementById("psnr-val");
+    const ssimVal = document.getElementById("ssim-val");
+
+    const resultTabs = document.getElementById("result-tabs");
+    const tabButtons = resultTabs.querySelectorAll("button");
+    const tabContents = document.querySelectorAll(".tab-content");
+
+    const downloadBtn = document.getElementById("download-report");
+
+    let lastResultData = null;
+
+    async function urlToDataUrl(url) {
+      const resp = await authenticatedFetch(url);
+      if (!resp || !resp.ok) throw new Error(`Failed to fetch image for embedding: ${resp.status}`);
+      const blob = await resp.blob();
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    function buildReportHtml(data) {
+      const note = data.note || "No clinical note returned.";
+      const icd10 = data.icd10 || "UNK (Unknown)";
+      const psnr = (data.psnr !== undefined && data.psnr !== null) ? `${Number(data.psnr).toFixed(2)} dB` : "N/A";
+      const ssim = (data.ssim !== undefined && data.ssim !== null) ? `${Number(data.ssim).toFixed(4)}` : "N/A";
+      const imageSrc = data.image_for_report || data.image_side_by_side || "";
+
+      return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>EHR Clinical Report</title><style>body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#f5f5f5;margin:0;padding:24px}.wrapper{max-width:900px;margin:0 auto;background:#fff;border-radius:12px;padding:24px 28px;box-shadow:0 10px 25px rgba(15,23,42,0.12)}pre{white-space:pre-wrap;background:#020617;color:#e5e7eb;padding:12px;border-radius:10px}</style></head><body><div class="wrapper"><h1>EHR Clinical Assistant Report</h1><p><strong>ICD-10 (suggested):</strong> ${icd10}</p><h2>Clinical Note</h2><pre>${note.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</pre><h2>Image Comparison</h2>${imageSrc ? `<img src="${imageSrc}" alt="Original vs Enhanced" style="max-width:100%">` : "<p>No image available</p>"}<h2>Metrics</h2><p>PSNR: ${psnr}</p><p>SSIM: ${ssim}</p></div></body></html>`;
+    }
+
+    function setLoading(isLoading) {
+      submitBtn.disabled = isLoading;
+      spinner.classList.toggle("hidden", !isLoading);
+      btnText.textContent = isLoading ? "Generating note..." : "Generate Clinical Note";
+      errorMessage.classList.add("hidden");
+      if (downloadBtn) downloadBtn.disabled = isLoading;
+    }
+
+    function showError(message) {
+      errorMessage.textContent = "Error: " + message;
+      errorMessage.classList.remove("hidden");
+    }
+
+    function switchTab(target) {
+      tabButtons.forEach((btn) => btn.classList.remove("tab-active"));
+      tabContents.forEach((c) => c.classList.add("hidden"));
+      const activeBtn = Array.from(tabButtons).find(b => b.getAttribute("data-tab") === target);
+      if (activeBtn) activeBtn.classList.add("tab-active");
+      const activeContent = document.getElementById(`tab-${target}`);
+      if (activeContent) activeContent.classList.remove("hidden");
+    }
+
+    resultTabs.addEventListener("click", (e) => {
+      if (e.target.tagName === "BUTTON") switchTab(e.target.getAttribute("data-tab"));
+    });
+
+    if (downloadBtn) {
+      downloadBtn.addEventListener("click", () => {
+        if (!lastResultData) return;
+        const html = buildReportHtml(lastResultData);
+        const blob = new Blob([html], { type: "text/html" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+        a.href = url; a.download = `ehr_report_${ts}.html`;
+        document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+      });
+    }
+
+    form.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      setLoading(true);
+
+      const fd = new FormData(form);
+      const file = fd.get("image");
+
+      if (!file || !file.name) {
+        setLoading(false);
+        showError("Please choose an image file.");
+        return;
+      }
+
+      if (!(file.type && file.type.startsWith("image/")) && !file.name.toLowerCase().endsWith(".dcm")) {
+        setLoading(false);
+        showError("Unsupported file type. Upload PNG/JPG/DICOM.");
+        return;
+      }
+
+      try {
+        console.info("Submitting to API endpoint:", API_ENDPOINT);
+
+        //  USE authenticatedFetch
+        const resp = await authenticatedFetch(API_ENDPOINT, {
+          method: "POST",
+          body: fd
+        });
+
+        if (!resp || !resp.ok) {
+          let txt;
+          try {
+            txt = await resp.text();
+          } catch (e) {
+            txt = `HTTP ${resp.status}`;
+          }
+          throw new Error(`Server returned ${resp.status}: ${txt.slice(0, 1000)}`);
+        }
+
+        let data;
+        try {
+          data = await resp.json();
+        } catch (e) {
+          const raw = await resp.text();
+          throw new Error("Invalid JSON from server: " + raw.slice(0, 1000));
+        }
+
+        const displayImageSrc = data.image_side_by_side || "";
+        if (displayImageSrc) {
+          imageOutput.innerHTML = `<img src="${displayImageSrc}" alt="Original vs Enhanced" class="w-full h-auto object-contain rounded-xl"/>`;
+        } else {
+          imageOutput.innerHTML = '<span class="text-xs sm:text-sm text-red-500">No image returned.</span>';
+        }
+
+        let embedded = displayImageSrc;
+        try {
+          if (embedded && !embedded.startsWith("data:")) {
+            embedded = await urlToDataUrl(embedded);
+          }
+        } catch (embedErr) {
+          console.warn("Could not embed image:", embedErr);
+        }
+
+        lastResultData = { ...data, image_for_report: embedded };
+
+        if (downloadBtn) downloadBtn.disabled = false;
+
+        noteOutput.textContent = data.note || "No clinical note returned.";
+        icd10Code.textContent = data.icd10 || "UNK (Unknown)";
+        psnrVal.textContent = (data.psnr !== undefined && data.psnr !== null) ? `${Number(data.psnr).toFixed(2)} dB` : "N/A";
+        ssimVal.textContent = (data.ssim !== undefined && data.ssim !== null) ? `${Number(data.ssim).toFixed(4)}` : "N/A";
+
+        switchTab("note");
+      } catch (err) {
+        console.error("Submission error:", err);
+        showError(err.message || "Processing failed");
+      } finally {
+        setLoading(false);
+      }
+    });
+
+    switchTab("note");
+  </script>
+
+  <!-- ADMIN LINK CHECK - UPDATED -->
+  <script>
+    (async function () {
+      try {
+        const resp = await authenticatedFetch("/api/whoami");
+        if (!resp || !resp.ok) return;
+
+        const data = await resp.json();
+        if (!data.email) return;
+
+        const r = await authenticatedFetch("/api/admin/list_users");
+        if (!r || !r.ok) return;
+
+        const obj = await r.json();
+        const me = obj.users.find(u => u.email === data.email);
+
+        if (me && me.role === "admin") {
+          document.getElementById("admin-link").classList.remove("hidden");
+        }
+      } catch (err) {
+        console.error('Admin check error:', err);
+      }
+    })();
+
+    //login fetch
+    (async function () {
+      try {
+        const res = await fetch("/api/whoami", { credentials: "same-origin" });
+        if (!res.ok) {
+          window.location.href = "/login";
+          return;
+        }
+
+        const user = await res.json();
+
+        document.getElementById("user-email")?.innerText = user.email;
+        document.getElementById("user-avatar")?.innerText = user.email[0].toUpperCase();
+
+        if (user.role === "admin") {
+          document.getElementById("admin-link")?.classList.remove("hidden");
+        }
+      } catch {
+        window.location.href = "/login";
+      }
+    })();
+    // LOGOUT HANDLER 
+    document.getElementById("logout-btn")?.addEventListener("click", async () => {
+      await fetch("/logout", { credentials: "same-origin" });
+      window.location.href = "/login";
+    });
+  </script>
+
+</body>
+
+</html>
