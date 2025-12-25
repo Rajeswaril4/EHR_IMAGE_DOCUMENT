@@ -9,6 +9,7 @@ import re
 import csv
 import secrets
 import hashlib
+import mysql.connector
 from pathlib import Path
 from typing import Optional, Dict, Tuple, List
 from collections import defaultdict
@@ -27,6 +28,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
 import jwt
+from mysql.connector import Error
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
@@ -134,8 +136,6 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "text-bison-001")
 GEMINI_AUTH_BEARER = os.getenv("GEMINI_AUTH_BEARER")
 GEMINI_BASE = os.getenv("GEMINI_BASE", "https://generativelanguage.googleapis.com/v1beta2")
 
-SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "change-this-in-prod")
-
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "bmp", "tif", "tiff", "dcm"}
 
 app = Flask(__name__, static_folder=None)
@@ -221,9 +221,20 @@ def ensure_db_and_tables():
                 email VARCHAR(255) NOT NULL UNIQUE,
                 password_hash VARCHAR(255) NOT NULL,
                 role ENUM('user', 'admin') DEFAULT 'user',
+                failed_login_attempts INT DEFAULT 0,
+                account_locked_until DATETIME NULL,
+                last_login DATETIME NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
+        # Ensure newer security columns exist (idempotent)
+        try:
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INT DEFAULT 0")
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS account_locked_until DATETIME NULL")
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login DATETIME NULL")
+        except Error:
+            pass
 
         # Reports table
         cur.execute("""
@@ -250,6 +261,55 @@ def ensure_db_and_tables():
             cur.execute("CREATE INDEX idx_reports_created_at ON reports(created_at)")
         except Error:
             pass 
+
+        # Token blacklist table for JWT revocation
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS token_blacklist (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                token_hash CHAR(64) NOT NULL UNIQUE,
+                reason VARCHAR(64) DEFAULT 'logout',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # Security events audit
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS security_events (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                event_type VARCHAR(100) NOT NULL,
+                email VARCHAR(255),
+                ip_address VARCHAR(64),
+                details TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # Admin audit log
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS admin_audit_log (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                admin_email VARCHAR(255) NOT NULL,
+                action VARCHAR(100) NOT NULL,
+                target_email VARCHAR(255),
+                details TEXT,
+                ip_address VARCHAR(64),
+                user_agent VARCHAR(500),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # Password reset tokens
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS password_resets (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                email VARCHAR(255) NOT NULL,
+                token VARCHAR(255) NOT NULL,
+                used BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                used_at TIMESTAMP NULL,
+                UNIQUE KEY uniq_token (token)
+            )
+        """)
 
         conn.commit()
         cur.close()
@@ -1210,11 +1270,6 @@ def login_route():
     )
     
     return resp, 200
-# ---------------- Logout route ----------------
-
-@app.route("/logout", methods=["POST"])
-def logout_route():
-    return jsonify({"ok": True, "message": "Logout handled client-side"}), 200
 
 @app.route("/api/whoami")
 @jwt_required

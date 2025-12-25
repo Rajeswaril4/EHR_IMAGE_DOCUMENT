@@ -236,8 +236,13 @@
 
         const user = await res.json();
 
-        document.getElementById("user-email")?.innerText = user.email;
-        document.getElementById("user-avatar")?.innerText = user.email[0].toUpperCase();
+        const emailEl = document.getElementById("user-email");
+        if (emailEl) emailEl.innerText = user.email;
+        const avatarEl = document.getElementById("user-avatar");
+        if (avatarEl && user.email) {
+          const first = user.email[0] || "U";
+          avatarEl.innerText = first.toUpperCase();
+        }
 
         if (user.role === "admin") {
           document.getElementById("admin-link")?.classList.remove("hidden");
