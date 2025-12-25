@@ -1,6 +1,5 @@
-# Virtual environment
+# Python virtual environment
 venv/
-env/
 
 # Python cache
 __pycache__/
@@ -9,10 +8,16 @@ __pycache__/
 # Environment variables
 .env
 
-# Uploads (if user files)
-uploads/
+# Logs
+*.log
 
-# OS / IDE files
-.vscode/
-.idea/
+# OS files
 .DS_Store
+Thumbs.db
+
+# ML / CV artifacts
+*.pkl
+*.joblib
+*.h5
+*.pt
+*.onnx
