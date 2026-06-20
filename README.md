@@ -136,6 +136,3 @@ python app.py
 
 ---
 
-## Team Members
-
-Developed as a Final Year B.Tech Artificial Intelligence & Data Science Project.
